@@ -15,8 +15,6 @@ import TodoList from '@ckeditor/ckeditor5-list/src/todolist';
 import Indent from '@ckeditor/ckeditor5-indent/src/indent';
 import BlockQuote from '@ckeditor/ckeditor5-block-quote/src/blockquote';
 import Alignment from '@ckeditor/ckeditor5-alignment/src/alignment';
-// import UploadAdapter from '@ckeditor/ckeditor5-adapter-ckfinder/src/uploadadapter';
-// import Autoformat from '@ckeditor/ckeditor5-autoformat/src/autoformat';
 import Bold from '@ckeditor/ckeditor5-basic-styles/src/bold';
 import Italic from '@ckeditor/ckeditor5-basic-styles/src/italic';
 import Underline from '@ckeditor/ckeditor5-basic-styles/src/underline';
@@ -28,35 +26,24 @@ import Font from '@ckeditor/ckeditor5-font/src/font';
 import Highlight from '@ckeditor/ckeditor5-highlight/src/highlight';
 import SpecialCharacters from '@ckeditor/ckeditor5-special-characters/src/specialcharacters';
 import Table from '@ckeditor/ckeditor5-table/src/table';
-// import CKBox from '@ckeditor/ckeditor5-ckbox/src/ckbox';
-// import CKFinder from '@ckeditor/ckeditor5-ckfinder/src/ckfinder';
-// import EasyImage from '@ckeditor/ckeditor5-easy-image/src/easyimage';
-// import Heading from '@ckeditor/ckeditor5-heading/src/heading';
-// import Image from '@ckeditor/ckeditor5-image/src/image';
-// import ImageCaption from '@ckeditor/ckeditor5-image/src/imagecaption';
-// import ImageStyle from '@ckeditor/ckeditor5-image/src/imagestyle';
-// import ImageToolbar from '@ckeditor/ckeditor5-image/src/imagetoolbar';
-// import ImageUpload from '@ckeditor/ckeditor5-image/src/imageupload';
 import Link from '@ckeditor/ckeditor5-link/src/link';
-
-// import MediaEmbed from '@ckeditor/ckeditor5-media-embed/src/mediaembed';
 import Paragraph from '@ckeditor/ckeditor5-paragraph/src/paragraph';
 import PasteFromOffice from '@ckeditor/ckeditor5-paste-from-office/src/pastefromoffice';
-// import PictureEditing from '@ckeditor/ckeditor5-image/src/pictureediting';
-// import CloudServices from '@ckeditor/ckeditor5-cloud-services/src/cloudservices';
 import Plugin from '@ckeditor/ckeditor5-core/src/plugin';
-import ButtonView from '@ckeditor/ckeditor5-ui/src/button/buttonview';
+import { ButtonView } from '@ckeditor/ckeditor5-ui/src/button/buttonview';
 import { icons } from '@ckeditor/ckeditor5-core';
+
+/* globals $ */
 
 export default class ClassicEditor extends ClassicEditorBase {}
 
 class References extends Plugin {
 	init() {
-		// console.log( 'test' );
 		const editor = this.editor;
 
 		// The button must be registered among the UI components of the editor
 		// to be displayed in the toolbar.
+
 		editor.ui.componentFactory.add( 'references', () => {
 		// The button will be an instance of ButtonView.
 			const button = new ButtonView();
@@ -68,59 +55,71 @@ class References extends Plugin {
 			} );
 
 			button.on( 'execute', () => {
-				// eslint-disable-next-line no-undef
 				const $modelContainer = $( '#references-modal-container' );
+				$modelContainer.removeClass( 'display-none' );
 				$modelContainer.find( '.modal-title' ).text( 'References' ); // window.polyglot.t('app.references.title')
 				// $modelContainer.find('.modal-body').text('References');
 				$modelContainer.modal( {
 					dismissible: false
 				} );
-
+				// on modal show
+				this.onModalShow( editor );
 				// on ok, write to the model
 				$modelContainer.find( '.model-button-ok' ).on( 'click', () => {
-					// eslint-disable-next-line no-undef
 					const checked = $( 'input[name="references-list"]' ).filter( ':checked' );
 
-					if ( checked.length === 0 ) {
+					if ( checked.length === 0 || this.insertMode ) {
 						return;
 					}
 
-					// if (this.insertMode) {
-					// Change the model using the model writer.
 					editor.model.change( writer => {
-						// writer.createElement('a', {
-						// 	linkHref: '#'
-						// });
-						// const reference = writer.createAttributeElement( 'a', { target: '#' });
 						const id = checked[ 0 ].value;
-						const reference = writer.createText( '[' + id + ']' );
+						this.addAttributesToLink( editor, id );
 
-						writer.setAttribute( 'linkHref', '#', reference );
-						writer.setAttribute( 'data-reference-link', id, reference );
-
-						// reference.addClass('reference');
-
-						// reference.attr('href', '#');
-						// reference.attr('data-reference-link', id);
-
-						// Insert the text at the user's current position.
-						editor.model.insertContent( reference );
-						//  this.editor.model.document.selection
+						const insertPosition = editor.model.document.selection.getFirstPosition();
+						writer.insertText( '[' + id + ']', { linkHref: '#', 'reference': id }, insertPosition );
 					} );
-					// }
 				} );
-
-				// const now = new Date();
-
-				// // Change the model using the model writer.
-				// editor.model.change( writer => {
-
-				//     // Insert the text at the user's current position.
-				//     editor.model.insertContent( writer.createText( now.toString() ) );
-				// } );
 			} );
 
 			return button;
+		} );
+	}
+
+	onModalShow( editor ) {
+		this.insertMode = false;
+		this.elementTest = editor.model.document.selection.getFirstRange();
+
+		// $( editor.sourceElement ).find( 'a' );
+
+		if ( !this.element ||
+			!this.element.start ||
+			!this.element.start.textNode ||
+			!this.element.start.textNode.getAttributeKeys().next().value === 'linkHref' ) {
+			return;
+		}
+		// element = document.createElement( 'a' );
+		this.insertMode = true;
+	}
+
+	addAttributesToLink( editor, id ) {
+		editor.conversion.for( 'downcast' ).add( dispatcher => {
+			dispatcher.on( 'attribute:reference', ( evt, data, conversionApi ) => {
+				const viewWriter = conversionApi.writer;
+				const viewSelection = viewWriter.document.selection;
+				const viewElement = viewWriter.createAttributeElement( 'a', {
+					class: 'reference',
+					'data-reference-link': id
+				}, {
+					priority: 5
+				} );
+
+				if ( data.item.is( 'selection' ) ) {
+					viewWriter.wrap( viewSelection.getFirstRange(), viewElement );
+				} else {
+					viewWriter.wrap( conversionApi.mapper.toViewRange( data.range ), viewElement );
+				}
+			}, { priority: 'low' } );
 		} );
 	}
 }
